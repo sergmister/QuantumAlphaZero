@@ -1,0 +1,29 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/ubuntu
+{
+  "name": "pytorch",
+  "dockerFile": "Dockerfile.pytorch",
+  "context": "..",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.scrollback": 20000
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "ms-python.isort",
+        "eamodio.gitlens",
+        "github.copilot",
+        "ms-toolsai.jupyter"
+      ]
+    }
+  },
+  "runArgs": [
+    "--gpus",
+    "all"
+  ],
+  "containerUser": "root"
+}

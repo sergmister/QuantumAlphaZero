@@ -1,0 +1,35 @@
+# the first couple of lines is directly copied from official pytorch Dockerfile.
+# Note that I removed the third party package installation to keep this image smaller.
+# It is different to the docker image that is pulled from pytorch/pytorch, I cannot use the base image from official dockerhub because it somehow is missing cuda.h in /usr/local/nvidia, which makes it impossible to install some gpu libraries.
+
+FROM nvcr.io/nvidia/pytorch:24.03-py3
+
+SHELL ["/bin/bash", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN chmod 1777 /tmp
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+         build-essential \
+         cmake \
+         git \
+         curl \
+         vim \
+         ssh \
+         tzdata \
+         ca-certificates \
+         libjpeg-dev \
+         libsm6 \
+         libxext6 \
+         libxrender-dev \
+         libpng-dev \
+         python3-dev \
+         python3-pip \
+     && rm -rf /var/lib/apt/lists/*
+
+# This must be done before pip so that requirements.txt is available.
+WORKDIR /tmp
+# pip install custom module listed in requirements.txt
+COPY ./.devcontainer/requirements.txt .
+RUN python3 -m pip install -r requirements.txt
+

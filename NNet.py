@@ -22,6 +22,7 @@ class OthelloNNet(nn.Module):
         self.dropout = 0.3
 
         super(OthelloNNet, self).__init__()
+
         self.conv1 = nn.Conv2d(1, self.num_channels, 3, stride=1, padding=1)
         self.conv2 = nn.Conv2d(self.num_channels, self.num_channels, 3, stride=1, padding=1)
         self.conv3 = nn.Conv2d(self.num_channels, self.num_channels, 3, stride=1)
@@ -64,13 +65,46 @@ class OthelloNNet(nn.Module):
         return F.log_softmax(pi, dim=1), torch.tanh(v)
 
 
+class OthelloNNet2(nn.Module):
+    def __init__(self, game):
+        # game params
+        self.board_x, self.board_y = game.n, game.n
+        self.action_size = game.num_distinct_actions()
+        self.dropout = 0.2
+
+        super(OthelloNNet2, self).__init__()
+
+        self.fc1 = nn.Linear(2 * self.board_x * self.board_y, 1024)
+        self.fc2 = nn.Linear(1024, 1024)
+        self.fc3 = nn.Linear(1024, 1024)
+
+        self.pi_out = nn.Linear(1024, self.action_size)
+        self.v_out = nn.Linear(1024, 1)
+
+    def forward(self, x):
+        # concatenate the board and player
+        # board = board.view(-1, self.board_x * self.board_y)
+        # player = player.view(-1, self.board_x * self.board_y)
+        # x = torch.cat((board, player), 1)
+        x = x.view(-1, 2 * self.board_x * self.board_y)
+        x = F.dropout(F.leaky_relu(self.fc1(x)), p=self.dropout, training=self.training)
+        x = F.dropout(F.leaky_relu(self.fc2(x)), p=self.dropout, training=self.training)
+        x = F.dropout(F.leaky_relu(self.fc3(x)), p=self.dropout, training=self.training)
+
+        pi = self.pi_out(x)
+        v = self.v_out(x)
+
+        return F.log_softmax(pi, dim=1), torch.tanh(v)
+
+
 class NNetWrapper:
     def __init__(self, game):
-        self.nnet = OthelloNNet(game, 512)
+        # self.nnet = OthelloNNet(game, 128)
+        self.nnet = OthelloNNet2(game)
         self.board_x, self.board_y = game.n, game.n
         self.action_size = game.num_distinct_actions()
         self.epochs = 10
-        self.batch_size = 64
+        self.batch_size = 256
         self.lr = 0.001
         self.cuda = torch.cuda.is_available()
 
@@ -81,41 +115,46 @@ class NNetWrapper:
         """
         examples: list of examples, each example is of form (board, pi, v)
         """
-        optimizer = optim.Adam(self.nnet.parameters())
+        optimizer = optim.Adam(self.nnet.parameters(), lr=self.lr, weight_decay=1e-4)
 
-        for epoch in range(self.epochs):
-            print("EPOCH ::: " + str(epoch + 1))
+        t = tqdm(range(self.epochs), desc="Training Net")
+        pi_losses = AverageMeter()
+        v_losses = AverageMeter()
+        for epoch in t:
+            # print("EPOCH ::: " + str(epoch + 1))
             self.nnet.train()
-            pi_losses = AverageMeter()
-            v_losses = AverageMeter()
 
             batch_count = int(len(examples) / self.batch_size)
 
-            t = tqdm(range(batch_count), desc="Training Net")
-            for _ in t:
+            # t = tqdm(range(batch_count), desc="Training Net")
+            for _ in range(batch_count):
                 sample_ids = np.random.randint(len(examples), size=self.batch_size)
                 boards, players, pis, vs = list(zip(*[examples[i] for i in sample_ids]))
-                boards = torch.FloatTensor(np.array(boards).astype(np.float32))
+                xs = np.zeros((len(boards), 2, self.board_x, self.board_y), dtype=np.float32)
+                for i in range(len(boards)):
+                    xs[i][0] = boards[i]
+                    xs[i][1] = players[i]
+                # boards = torch.FloatTensor(np.array(boards).astype(np.float32))
+                xs = torch.FloatTensor(xs)
                 target_pis = torch.FloatTensor(np.array(pis))
                 target_vs = torch.FloatTensor(np.array(vs).astype(np.float32))
 
                 # predict
                 if self.cuda:
-                    boards, target_pis, target_vs = (
-                        boards.contiguous().cuda(),
-                        target_pis.contiguous().cuda(),
-                        target_vs.contiguous().cuda(),
-                    )
+                    # boards = boards.contiguous().cuda()
+                    xs = xs.contiguous().cuda()
+                    target_pis = target_pis.contiguous().cuda()
+                    target_vs = target_vs.contiguous().cuda()
 
                 # compute output
-                out_pi, out_v = self.nnet(boards)
+                out_pi, out_v = self.nnet(xs)
                 l_pi = self.loss_pi(target_pis, out_pi)
                 l_v = self.loss_v(target_vs, out_v)
                 total_loss = l_pi + l_v
 
                 # record loss
-                pi_losses.update(l_pi.item(), boards.size(0))
-                v_losses.update(l_v.item(), boards.size(0))
+                pi_losses.update(l_pi.item(), xs.size(0))
+                v_losses.update(l_v.item(), xs.size(0))
                 t.set_postfix(Loss_pi=pi_losses, Loss_v=v_losses)
 
                 # compute gradient and do SGD step
@@ -123,21 +162,18 @@ class NNetWrapper:
                 total_loss.backward()
                 optimizer.step()
 
-    def predict(self, board):
-        """
-        board: np array with board
-        """
+    def predict(self, x):
         # timing
         start = time.time()
 
         # preparing input
-        board = torch.FloatTensor(board.astype(np.float32))
+        x = torch.FloatTensor(x.astype(np.float32))
         if self.cuda:
-            board = board.contiguous().cuda()
-        board = board.view(1, self.board_x, self.board_y)
+            x = x.contiguous().cuda()
+        x = x.view(1, 2, self.board_x * self.board_y)
         self.nnet.eval()
         with torch.no_grad():
-            pi, v = self.nnet(board)
+            pi, v = self.nnet(x)
 
         # print('PREDICTION TIME TAKEN : {0:03f}'.format(time.time()-start))
         return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]

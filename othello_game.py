@@ -224,8 +224,8 @@ def get_othello_symmetries(board, pi):
         # 90 degree rotations
         rotated_board = np.rot90(board, i)
         flipped_board = np.fliplr(rotated_board)
-        rotated_pi = np.rot90(pi.reshape(6, 6), i).flatten()
-        flipped_pi = np.fliplr(rotated_pi.reshape(6, 6)).flatten()
+        rotated_pi = np.rot90(pi.reshape(board.shape), i).flatten()
+        flipped_pi = np.fliplr(rotated_pi.reshape(board.shape)).flatten()
         symmetries.append((flipped_board, flipped_pi))
         symmetries.append((rotated_board, rotated_pi))
     return symmetries

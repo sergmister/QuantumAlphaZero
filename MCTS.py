@@ -101,7 +101,9 @@ class MCTS:
             #         2, self.game.n, self.game.n
             #     )
             # )
-            self.Ps[s], v = self.model.predict(state.board)
+            inarr = np.stack((state.board, np.full((self.game.n, self.game.n), state._get_turn(state.current_player()))))
+            self.Ps[s], v = self.model.predict(inarr)
+            v *= state._get_turn(state.current_player())
             valids = np.zeros(self.game.num_distinct_actions(), dtype=np.float32)
             valids[state.legal_actions()] = 1.0
             self.Ps[s] = self.Ps[s] * valids  # masking invalid moves
@@ -122,6 +124,7 @@ class MCTS:
             return -v
 
         valids = self.Vs[s]
+        num_valids = np.sum(valids)
         cur_best = -float("inf")
         best_act = -1
 
@@ -129,11 +132,13 @@ class MCTS:
         for a in range(self.game.num_distinct_actions()):
             if valids[a]:
                 if (s, a) in self.Qsa:
-                    u = self.Qsa[(s, a)] + self.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
-                        1 + self.Nsa[(s, a)]
-                    )
+                    # u = self.Qsa[(s, a)] + self.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
+                    #     1 + self.Nsa[(s, a)]
+                    # )
+                    u = self.Qsa[(s, a)] + self.cpuct * (1 / num_valids) * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)])
                 else:
-                    u = self.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
+                    # u = self.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
+                    u = self.cpuct * (1 / num_valids) * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
 
                 if u > cur_best:
                     cur_best = u
