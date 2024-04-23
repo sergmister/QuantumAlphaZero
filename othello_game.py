@@ -3,7 +3,7 @@ from open_spiel.python.observation import IIGObserverForPublicInfoGame
 import pyspiel
 
 DIRS = ((0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1))
-DEFAULT_N = 4
+DEFAULT_N = 6
 
 num_players = 2
 game_type = pyspiel.GameType(
@@ -50,6 +50,10 @@ class OthelloGame(pyspiel.Game):
             return BoardObserver(params)
         else:
             return IIGObserverForPublicInfoGame(iig_obs_type, params)
+
+    def num_distinct_actions(self):
+        """Returns the number of distinct actions available to an agent."""
+        return self.n * self.n
 
 
 class OthelloState(pyspiel.State):
@@ -193,12 +197,12 @@ class BoardObserver:
 
     def set_from(self, state, player):
         """Updates `tensor` and `dict` to reflect `state` from PoV of `player`."""
-        del player
+        # del player
         # We update the observation via the shaped tensor since indexing is more
         # convenient than with the 1-D tensor. Both are views onto the same memory.
         obs = self.dict["observation"]
-        obs[0, :, :] = state.board == 1
-        obs[1, :, :] = state.board == -1
+        obs[0, :, :] = state.board == state._get_turn(player)
+        obs[1, :, :] = state.board == -state._get_turn(player)
 
     def string_from(self, state, player):
         """Observation of `state` from the PoV of `player`, as a string."""
@@ -208,7 +212,9 @@ class BoardObserver:
 
 def _board_to_string(board):
     """Returns a string representation of the board."""
-    return "\n".join(" ".join(row) for row in board)
+    return "\n".join(
+        " ".join("X" if c == 1 else "O" if c == -1 else "." for c in row) for row in board
+    )
 
 
 # Register the game with the OpenSpiel library
