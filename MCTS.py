@@ -96,11 +96,12 @@ class MCTS:
 
         if s not in self.Ps:
             # leaf node
-            self.Ps[s], v = self.model.predict(
-                np.array(state.observation_tensor(state._cur_player)).reshape(
-                    2, self.game.n, self.game.n
-                )
-            )
+            # self.Ps[s], v = self.model.predict(
+            #     np.array(state.observation_tensor(state._cur_player)).reshape(
+            #         2, self.game.n, self.game.n
+            #     )
+            # )
+            self.Ps[s], v = self.model.predict(state.board)
             valids = np.zeros(self.game.num_distinct_actions(), dtype=np.float32)
             valids[state.legal_actions()] = 1.0
             self.Ps[s] = self.Ps[s] * valids  # masking invalid moves

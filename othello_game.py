@@ -217,6 +217,20 @@ def _board_to_string(board):
     )
 
 
+def get_othello_symmetries(board, pi):
+    """Returns symmetries of the state (mirror, rotation)."""
+    symmetries = []
+    for i in range(1, 4):
+        # 90 degree rotations
+        rotated_board = np.rot90(board, i)
+        flipped_board = np.fliplr(rotated_board)
+        rotated_pi = np.rot90(pi.reshape(6, 6), i).flatten()
+        flipped_pi = np.fliplr(rotated_pi.reshape(6, 6)).flatten()
+        symmetries.append((flipped_board, flipped_pi))
+        symmetries.append((rotated_board, rotated_pi))
+    return symmetries
+
+
 # Register the game with the OpenSpiel library
 
 pyspiel.register_game(game_type, OthelloGame)
