@@ -27,10 +27,10 @@ class Coach:
     def __init__(self, game, model):
         self.game = game
         self.model = model
-        self.num_iters = 50
-        self.num_eps = 10
+        self.num_iters = 20
+        self.num_eps = 5
         self.numMCTSSims = 25
-        self.trainExamplesHistory = deque([], maxlen=50000)
+        self.trainExamplesHistory = deque([], maxlen=1024)
 
     def self_play(self):
         # [(board, current_player, pi, v)]
@@ -43,7 +43,16 @@ class Coach:
             pi = mcts.getActionProb(state, temp=1)
             sym = get_othello_symmetries(copy.copy(state.board), np.array(pi, dtype=np.float32))
             for b, p in sym:
-                trainExamples.append([b, np.full((self.game.n, self.game.n), state._get_turn(state.current_player())), p, None])
+                trainExamples.append(
+                    [
+                        b,
+                        np.full(
+                            (self.game.n, self.game.n), state._get_turn(state.current_player())
+                        ),
+                        p,
+                        None,
+                    ]
+                )
             # trainExamples.append([copy.copy(state.board), np.full((self.game.n, self.game.n), state._get_turn(state.current_player())), pi, None])
 
             action = np.random.choice(len(pi), p=pi)
@@ -68,7 +77,16 @@ class Coach:
             pi = pi / np.sum(pi)
             sym = get_othello_symmetries(copy.copy(state.board), np.array(pi, dtype=np.float32))
             for b, p in sym:
-                trainExamples.append([b, np.full((self.game.n, self.game.n), state._get_turn(state.current_player())), p, None])
+                trainExamples.append(
+                    [
+                        b,
+                        np.full(
+                            (self.game.n, self.game.n), state._get_turn(state.current_player())
+                        ),
+                        p,
+                        None,
+                    ]
+                )
             action = agent.step(state)
             state.apply_action(action)
 

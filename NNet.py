@@ -117,7 +117,7 @@ class NNetWrapper:
         """
         optimizer = optim.Adam(self.nnet.parameters(), lr=self.lr, weight_decay=1e-4)
 
-        t = tqdm(range(self.epochs), desc="Training Net")
+        t = tqdm(range(self.epochs), desc="Training NNet")
         pi_losses = AverageMeter()
         v_losses = AverageMeter()
         for epoch in t:

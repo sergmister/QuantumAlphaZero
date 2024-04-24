@@ -101,7 +101,12 @@ class MCTS:
             #         2, self.game.n, self.game.n
             #     )
             # )
-            inarr = np.stack((state.board, np.full((self.game.n, self.game.n), state._get_turn(state.current_player()))))
+            inarr = np.stack(
+                (
+                    state.board,
+                    np.full((self.game.n, self.game.n), state._get_turn(state.current_player())),
+                )
+            )
             self.Ps[s], v = self.model.predict(inarr)
             v *= state._get_turn(state.current_player())
             valids = np.zeros(self.game.num_distinct_actions(), dtype=np.float32)
@@ -135,7 +140,9 @@ class MCTS:
                     # u = self.Qsa[(s, a)] + self.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
                     #     1 + self.Nsa[(s, a)]
                     # )
-                    u = self.Qsa[(s, a)] + self.cpuct * (1 / num_valids) * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)])
+                    u = self.Qsa[(s, a)] + self.cpuct * (1 / num_valids) * math.sqrt(self.Ns[s]) / (
+                        1 + self.Nsa[(s, a)]
+                    )
                 else:
                     # u = self.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
                     u = self.cpuct * (1 / num_valids) * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?

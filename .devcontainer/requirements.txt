@@ -19,3 +19,5 @@ ipython
 mkl
 mkl-include
 open_spiel
+qiskit
+pennylane
