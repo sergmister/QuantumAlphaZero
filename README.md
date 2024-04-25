@@ -1,2 +1,2 @@
 # QuantumAlphaZero
-AlphaZero with Quantum neural networks for the game of Othello
+AlphaZero using Quantum Neural Networks for the game of Othello.
