@@ -21,3 +21,9 @@ mkl-include
 open_spiel
 qiskit
 pennylane
+nvidia-cuda-runtime-cu12
+nvidia-cublas-cu12
+nvidia-cusolver-cu12
+nvidia-cusparse-cu12
+cuquantum-cu12
+pennylane-lightning[gpu]

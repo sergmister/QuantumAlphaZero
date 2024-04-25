@@ -97,15 +97,39 @@ class OthelloNNet2(nn.Module):
         return F.log_softmax(pi, dim=1), torch.tanh(v)
 
 
+class OthelloNNet3(nn.Module):
+    def __init__(self, game, hidden_size):
+        # game params
+        self.board_x, self.board_y = game.n, game.n
+
+        super(OthelloNNet3, self).__init__()
+
+        self.fc1 = nn.Linear(self.board_x * self.board_y + 1, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.v_out = nn.Linear(hidden_size, 1)
+
+        self.total_params = sum(p.numel() for p in self.parameters())
+
+    def forward(self, x):
+        x = x.view(-1, self.board_x * self.board_y + 1)
+        x = F.leaky_relu(self.fc1(x))
+        x = F.leaky_relu(self.fc2(x))
+        x = F.leaky_relu(self.fc3(x))
+        v = self.v_out(x)
+        return torch.tanh(v)
+
+
 class NNetWrapper:
-    def __init__(self, game):
+    def __init__(self, game, hidden_size=8, lr=0.001):
         # self.nnet = OthelloNNet(game, 128)
-        self.nnet = OthelloNNet2(game)
+        # self.nnet = OthelloNNet2(game)
+        self.nnet = OthelloNNet3(game, hidden_size)
         self.board_x, self.board_y = game.n, game.n
         self.action_size = game.num_distinct_actions()
-        self.epochs = 10
+        self.epochs = 3
         self.batch_size = 256
-        self.lr = 0.001
+        self.lr = lr
         self.cuda = torch.cuda.is_available()
 
         if self.cuda:
@@ -117,66 +141,79 @@ class NNetWrapper:
         """
         optimizer = optim.Adam(self.nnet.parameters(), lr=self.lr, weight_decay=1e-4)
 
-        t = tqdm(range(self.epochs), desc="Training NNet")
-        pi_losses = AverageMeter()
+        # t = tqdm(range(self.epochs), desc="Training NNet")
+        # pi_losses = AverageMeter()
         v_losses = AverageMeter()
-        for epoch in t:
-            # print("EPOCH ::: " + str(epoch + 1))
+        for epoch in range(self.epochs):
+            print(f"Epoch {epoch}")
             self.nnet.train()
 
             batch_count = int(len(examples) / self.batch_size)
 
-            # t = tqdm(range(batch_count), desc="Training Net")
-            for _ in range(batch_count):
-                sample_ids = np.random.randint(len(examples), size=self.batch_size)
-                boards, players, pis, vs = list(zip(*[examples[i] for i in sample_ids]))
-                xs = np.zeros((len(boards), 2, self.board_x, self.board_y), dtype=np.float32)
+            shuffled_indices = np.random.permutation(len(examples))
+
+            t = tqdm(range(batch_count), desc="Training Net")
+            for batch in t:
+                # sample_ids = np.random.randint(len(examples), size=self.batch_size)
+                # boards, players, pis, vs = list(zip(*[examples[i] for i in sample_ids]))
+
+                # use shuffled indices
+                start_idx = batch * self.batch_size
+                end_idx = (batch + 1) * self.batch_size
+                if end_idx > len(examples):
+                    end_idx = len(examples)
+                indices = shuffled_indices[start_idx:end_idx]
+                boards, players, pis, vs = list(zip(*[examples[i] for i in indices]))
+
+                xs = np.zeros((len(boards), self.board_x * self.board_y + 1), dtype=np.float32)
                 for i in range(len(boards)):
-                    xs[i][0] = boards[i]
-                    xs[i][1] = players[i]
+                    xs[i][: (self.board_x * self.board_y)] = boards[i].flatten()
+                    xs[i][(self.board_x * self.board_y) :] = players[i]
                 # boards = torch.FloatTensor(np.array(boards).astype(np.float32))
                 xs = torch.FloatTensor(xs)
-                target_pis = torch.FloatTensor(np.array(pis))
+                # target_pis = torch.FloatTensor(np.array(pis))
                 target_vs = torch.FloatTensor(np.array(vs).astype(np.float32))
 
                 # predict
                 if self.cuda:
                     # boards = boards.contiguous().cuda()
                     xs = xs.contiguous().cuda()
-                    target_pis = target_pis.contiguous().cuda()
+                    # target_pis = target_pis.contiguous().cuda()
                     target_vs = target_vs.contiguous().cuda()
 
                 # compute output
-                out_pi, out_v = self.nnet(xs)
-                l_pi = self.loss_pi(target_pis, out_pi)
+                # out_pi, out_v = self.nnet(xs)
+                out_v = self.nnet(xs)
+                # l_pi = self.loss_pi(target_pis, out_pi)
                 l_v = self.loss_v(target_vs, out_v)
-                total_loss = l_pi + l_v
+                # total_loss = l_pi + l_v
+                total_loss = l_v
 
                 # record loss
-                pi_losses.update(l_pi.item(), xs.size(0))
+                # pi_losses.update(l_pi.item(), xs.size(0))
                 v_losses.update(l_v.item(), xs.size(0))
-                t.set_postfix(Loss_pi=pi_losses, Loss_v=v_losses)
+                # t.set_postfix(Loss_pi=pi_losses, Loss_v=v_losses)
+                t.set_postfix(Loss_v=v_losses)
 
                 # compute gradient and do SGD step
                 optimizer.zero_grad()
                 total_loss.backward()
                 optimizer.step()
 
-    def predict(self, x):
-        # timing
-        start = time.time()
-
+    def predict(self, board, player):
         # preparing input
-        x = torch.FloatTensor(x.astype(np.float32))
+        x = torch.FloatTensor(np.concatenate((board.flatten(), [player]), dtype=np.float32))
         if self.cuda:
             x = x.contiguous().cuda()
-        x = x.view(1, 2, self.board_x * self.board_y)
+        x = x.view(1, self.board_x * self.board_y + 1)
         self.nnet.eval()
         with torch.no_grad():
-            pi, v = self.nnet(x)
+            # pi, v = self.nnet(x)
+            v = self.nnet(x)
 
         # print('PREDICTION TIME TAKEN : {0:03f}'.format(time.time()-start))
-        return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]
+        # return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]
+        return np.ones(self.board_x * self.board_y, dtype=np.float32), v.data.cpu().numpy()[0]
 
     def loss_pi(self, targets, outputs):
         return -torch.sum(targets * outputs) / targets.size()[0]

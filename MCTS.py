@@ -101,13 +101,14 @@ class MCTS:
             #         2, self.game.n, self.game.n
             #     )
             # )
-            inarr = np.stack(
-                (
-                    state.board,
-                    np.full((self.game.n, self.game.n), state._get_turn(state.current_player())),
-                )
-            )
-            self.Ps[s], v = self.model.predict(inarr)
+            # inarr = np.stack(
+            #     (
+            #         state.board,
+            #         np.full((self.game.n, self.game.n), state._get_turn(state.current_player())),
+            #     )
+            # )
+            # self.Ps[s], v = self.model.predict(inarr)
+            self.Ps[s], v = self.model.predict(state.board, state._get_turn(state.current_player()))
             v *= state._get_turn(state.current_player())
             valids = np.zeros(self.game.num_distinct_actions(), dtype=np.float32)
             valids[state.legal_actions()] = 1.0

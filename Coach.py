@@ -11,7 +11,7 @@ import multiprocessing
 import numpy as np
 from tqdm import tqdm
 import pyspiel
-from open_spiel.python.algorithms import mcts, random_agent
+from open_spiel.python.algorithms import mcts, random_agent, minimax
 from othello_game import OthelloGame, OthelloState
 
 from Arena import Arena
@@ -24,13 +24,26 @@ log = logging.getLogger(__name__)
 
 
 class Coach:
-    def __init__(self, game, model):
+    def __init__(
+        self,
+        game,
+        model,
+        num_iters=20,
+        num_eps=5,
+        numMCTSSims=25,
+        compare_with=["random", "mcts"],
+        compare_games=50,
+        max_history_len=8192,
+    ):
         self.game = game
         self.model = model
-        self.num_iters = 20
-        self.num_eps = 5
-        self.numMCTSSims = 25
-        self.trainExamplesHistory = deque([], maxlen=1024)
+        self.num_iters = num_iters
+        self.num_eps = num_eps
+        self.numMCTSSims = numMCTSSims
+        self.compare_with = compare_with
+        self.compare_games = compare_games
+        self.trainExamplesHistory = deque([], maxlen=max_history_len)
+        self.performanceHistory = []
 
     def self_play(self):
         # [(board, current_player, pi, v)]
@@ -46,9 +59,10 @@ class Coach:
                 trainExamples.append(
                     [
                         b,
-                        np.full(
-                            (self.game.n, self.game.n), state._get_turn(state.current_player())
-                        ),
+                        # np.full(
+                        #     (self.game.n, self.game.n), state._get_turn(state.current_player())
+                        # ),
+                        state._get_turn(state.current_player()),
                         p,
                         None,
                     ]
@@ -97,51 +111,83 @@ class Coach:
         return trainExamples
 
     def learn(self):
-        for i in range(1, self.num_iters + 1):
+        for i in range(0, self.num_iters + 1):
             print(f"Iter {i}")
 
-            for _ in tqdm(range(self.num_eps), desc="Self Play"):
-                self.trainExamplesHistory.extend(self.self_play())
-                # self.trainExamplesHistory.extend(self.watch_play())
+            if i > 0:
+                for _ in tqdm(range(self.num_eps), desc="Self Play"):
+                    self.trainExamplesHistory.extend(self.self_play())
 
-            # play games in parallel
-            # new_examples = pool.map(self.self_play, range(self.num_eps))
-            # for examples in new_examples:
-            #     self.trainExamplesHistory.extend(examples)
+                if len(self.trainExamplesHistory) >= 16:
+                    self.model.train(self.trainExamplesHistory)
 
-            if len(self.trainExamplesHistory) > 100:
-                self.model.train(self.trainExamplesHistory)
+            if i % 4 == 0:
+                print("Testing...")
 
-            print("Pitting against previous version")
+                def get_alpha_zero_player():
+                    class AlphaZeroPlayer:
+                        def __init__(self, game, model, numMCTSSims):
+                            self.model = model
+                            self.mcts = MCTS(game, self.model, numMCTSSims=numMCTSSims)
 
-            def get_alpha_zero_player():
-                class AlphaZeroPlayer:
-                    def __init__(self, game, model, numMCTSSims=50):
-                        self.model = model
-                        self.mcts = MCTS(game, self.model, numMCTSSims=numMCTSSims)
+                        def step(self, state):
+                            probs = self.mcts.getActionProb(state, temp=1)
+                            action = np.argmax(probs)
+                            return action
 
-                    def step(self, state):
-                        probs = self.mcts.getActionProb(state, temp=1)
-                        # action = np.random.choice(len(probs), p=probs)
-                        action = np.argmax(probs)
-                        return action
+                    return AlphaZeroPlayer(self.game, self.model, self.numMCTSSims)
 
-                return AlphaZeroPlayer(self.game, self.model, numMCTSSims=self.numMCTSSims)
+                def get_random_player():
+                    class RandomPlayer:
+                        def __init__(self, game):
+                            self.game = game
 
-            def get_random_player():
-                class RandomPlayer:
-                    def __init__(self, game):
-                        self.game = game
+                        def step(self, state):
+                            legal_actions = state.legal_actions()
+                            action = random.choice(legal_actions)
+                            return action
 
-                    def step(self, state):
-                        legal_actions = state.legal_actions()
-                        action = random.choice(legal_actions)
-                        return action
+                    return RandomPlayer(self.game)
 
-                return RandomPlayer(self.game)
+                def get_mcts_player():
+                    class MCTSPlayer:
+                        def __init__(self, game, numMCTSSims):
+                            self.game = game
+                            evaluator = mcts.RandomRolloutEvaluator(n_rollouts=1)
+                            self.mcts = mcts.MCTSBot(
+                                game, uct_c=2, max_simulations=numMCTSSims, evaluator=evaluator
+                            )
 
-            arena = Arena(self.game, get_alpha_zero_player, get_random_player)
+                        def step(self, state):
+                            action = self.mcts.step(state)
+                            return action
 
-            # if i % 10 == 0:
-            #     oneWon, twoWon, draws = arena.playGames(10)
-            #     print(f"1: {oneWon}, 2: {twoWon}, d: {draws}")
+                    return MCTSPlayer(self.game, self.numMCTSSims)
+
+                def get_minimax_player():
+                    class MinimaxPlayer:
+                        def __init__(self, game):
+                            self.game = game
+
+                        def step(self, state):
+                            value, action = minimax.alpha_beta_search(self.game, state)
+                            return action
+
+                    return MinimaxPlayer(self.game)
+
+                results = {}
+                if "random" in self.compare_with:
+                    results["random"] = Arena(
+                        self.game, get_alpha_zero_player, get_random_player
+                    ).playGames(self.compare_games)
+                if "mcts" in self.compare_with:
+                    results["mcts"] = Arena(
+                        self.game, get_alpha_zero_player, get_mcts_player
+                    ).playGames(self.compare_games)
+                if "minimax" in self.compare_with:
+                    results["minimax"] = Arena(
+                        self.game, get_alpha_zero_player, get_minimax_player
+                    ).playGames(self.compare_games)
+
+                print(results)
+                self.performanceHistory.append((i, results))

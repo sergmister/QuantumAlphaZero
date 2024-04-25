@@ -3,7 +3,7 @@ from open_spiel.python.observation import IIGObserverForPublicInfoGame
 import pyspiel
 
 DIRS = ((0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1))
-DEFAULT_N = 4
+DEFAULT_N = 6
 
 num_players = 2
 game_type = pyspiel.GameType(
@@ -20,7 +20,7 @@ game_type = pyspiel.GameType(
     provides_information_state_tensor=False,
     provides_observation_string=True,
     provides_observation_tensor=True,
-    parameter_specification={},
+    parameter_specification={"n": DEFAULT_N},
 )
 
 
