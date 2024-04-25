@@ -31,6 +31,7 @@ class Coach:
         num_iters=20,
         num_eps=5,
         numMCTSSims=25,
+        iters_per_comparison=4,
         compare_with=["random", "mcts"],
         compare_games=50,
         max_history_len=8192,
@@ -40,6 +41,7 @@ class Coach:
         self.num_iters = num_iters
         self.num_eps = num_eps
         self.numMCTSSims = numMCTSSims
+        self.iters_per_comparison = iters_per_comparison
         self.compare_with = compare_with
         self.compare_games = compare_games
         self.trainExamplesHistory = deque([], maxlen=max_history_len)
@@ -121,7 +123,7 @@ class Coach:
                 if len(self.trainExamplesHistory) >= 16:
                     self.model.train(self.trainExamplesHistory)
 
-            if i % 4 == 0:
+            if i % self.iters_per_comparison == 0:
                 print("Testing...")
 
                 def get_alpha_zero_player():

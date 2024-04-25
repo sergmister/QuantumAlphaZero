@@ -127,7 +127,7 @@ class NNetWrapper:
         self.nnet = OthelloNNet3(game, hidden_size)
         self.board_x, self.board_y = game.n, game.n
         self.action_size = game.num_distinct_actions()
-        self.epochs = 3
+        self.epochs = 10
         self.batch_size = 256
         self.lr = lr
         self.cuda = torch.cuda.is_available()
